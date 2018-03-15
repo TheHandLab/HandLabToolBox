@@ -1,0 +1,42 @@
+% pp.m test script
+pin=1;                                                                      % pin number(s)
+value=ones(numel(pin),1);                                                   % value to send to pin
+duration=0.05;                                                              % duration of stimulus
+addr=888;                                                                   % port address
+port=0;                                                                     % port number
+
+trials=10;                                                                  % repetitions of stimuli
+data=zeros(trials,5);                                                       % output record
+for n=1:trials                                                              % for each trial
+    a=randperm(5)+1;                                                        % random order of pins
+    pin=a(1);                                                               % select first random pin
+    data(n,1)=GetSecs;                                                      % get time
+    pp(pin,value,false,port,addr);                                          % put value to pin
+    %disp(pin);
+    data(n,2)=GetSecs;                                                      % get time
+    pause(duration);                                                        % wait
+    data(n,3)=GetSecs;                                                      % get time
+    pp(pin,0.*value,false,port,addr);                                       % clear value from pin
+    data(n,4)=GetSecs;                                                      % get time
+    pause(duration);                                                        % wait
+    data(n,5)=GetSecs;                                                      % get time
+end
+figure;                                                                     % plot figure
+subplot(2,1,1);                                                             % upper plot - time to initiate calls
+    hold on;                                                                % two plots in one
+    plot(data(:,2)-data(:,1),'go');                                         % time to call pp 1
+    plot(data(:,4)-data(:,3),'r+');                                         % time to call pp 2
+subplot(2,1,2);                                                             % lower plot - time waited
+    hold on;                                                                % two plots in one
+    plot(data(:,3)-data(:,2),'go');                                         % timed duration 1
+    plot(data(:,5)-data(:,4),'r+');                                         % timed duration 2
+    
+meancall=mean([data(:,2)-data(:,1); data(:,4)-data(:,3)]);                  % mean call duration
+sdcall=std([data(:,2)-data(:,1); data(:,4)-data(:,3)],0,1);                 % SD call duration
+mincall=min([data(:,2)-data(:,1); data(:,4)-data(:,3)]);                    % min call duration
+maxcall=max([data(:,2)-data(:,1); data(:,4)-data(:,3)]);                    % max call duration
+
+meandur=mean([data(:,3)-data(:,2); data(:,5)-data(:,4)]);                   % mean duration
+sddur=std([data(:,3)-data(:,2); data(:,5)-data(:,4)],0,1);                  % SD duration
+mindur=min([data(:,3)-data(:,2); data(:,5)-data(:,4)]);                     % min duration
+maxdur=max([data(:,3)-data(:,2); data(:,5)-data(:,4)]);                     % max duration

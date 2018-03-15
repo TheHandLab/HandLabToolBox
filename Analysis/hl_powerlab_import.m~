@@ -1,0 +1,61 @@
+% function [data,trigger,settings]=hl_powerlab_import(filename,columns [,rows])
+% INPUTS
+% filename = raw data file name
+% columns = columns of floating point data (e.g., 2-17, including time)
+% rows (optional, if specified will speed up import, can be approximate)
+% OUTPUTS
+% data = columns of data, first one may be the time
+% triggers = data input port readings
+% settings = structure with sampling frequency, date, time, channel titles & ranges
+function [data,triggers,settings]=hl_powerlab_import(filename,columns,rows)
+ if nargin==2
+  rows=1000;
+ end
+ if isempty(rows)
+  rows=1000;
+ end
+ formatstringtitles='';
+ formatstringranges='';
+ formatstringdata='';
+ outputstring='';
+ outputcell=cell(rows,columns+8);
+ n=0;
+ fid=fopen(filename);
+ for n=1:columns-1
+  formatstringtitles=[formatstringtitles,'%s'];                             % create titles input format (number of columns)
+  formatstringranges=[formatstringranges,'%10c'];                           % create titles input format (number of columns)
+ end
+ for n=1:columns  
+  formatstringdata=[formatstringdata,'%f'];                                 % create data input format (number of columns)
+ end
+ C=textscan(fid,'%s',1);
+ if strcmp(C{1},'Interval=')
+  C=textscan(fid,['%f %*2c\nExcelDateTime=%*f %s %s %*c\n TimeFormat=%s %*c\n ChannelTitle=',formatstringtitles,' %*c\n Range=',formatstringranges]);
+  settings.interval=C{1};
+  settings.date=cell2mat(C{2});
+  settings.time=cell2mat(C{3});
+  settings.timeformat=cell2mat(C{4});
+  for n=1:columns-1                                                         % column titles (not for time)
+   settings.channeltitles(n)=C{4+n};
+  end
+  for n=1:columns-1                                                         % range titles (not for time)
+   settings.channelranges(n,:)=C{4+n+columns-1};
+  end
+ else
+  frewind(fid);                                                             % go back to start of file
+  settings='';
+ end
+ formatstringdata=[formatstringdata,'%*s%u%*s%u%*s%u%*s%u%*s%u%*s%u%*s%u%*s%u'];% collect 8 trigger bits
+ outputcell=textscan(fid,formatstringdata);                                 % import data
+ for n=1:columns
+  data(:,n)=outputcell{n};                                                  % convert data into a matrix
+ end
+ trigger=uint32(zeros(size(data,1),1));                                     % for triggers
+ for n=columns+1:columns+8
+  triggerlength=size(outputcell{n},1);
+  trigger(1:triggerlength)=trigger(1:triggerlength)+outputcell{n};          % add up triggers
+ end                                                                        % of column loop
+ trigger=sum(trigger,2);						    % sum of all trigger values per row=trigger
+ triggers=find(trigger>0);						    % list of all non-zero triggers
+ triggers(:,2)=trigger(triggers(:,1));				            % column 1=sample, column 2=trigger
+end                                                                         % of function

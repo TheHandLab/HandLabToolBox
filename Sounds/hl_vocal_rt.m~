@@ -1,0 +1,242 @@
+% auditory-tactile interactions in near-hand space
+% tactile targets (weak or strong vibrations) are presented to the index finger
+% auditory distractors are presented from a near or a far speaker
+% participants respond as quickly and as accurately as possible by saying
+% 'tah' into a headset microphone
+
+%% Experiment 1
+% GO: weak (or strong) tactile stimulus
+% NOGO: strong tactile stimulus or no tactile stimulus
+% half of each trial type has a far, and half a near sound
+% Conditions:
+% 1: No tactile + near sound (10% of stimuli=16)
+% 2: No tactile + far sound (10% of stimuli=16)
+% 3: Weak tactile + near sound (90% detection, 20% of stimuli=32)
+% 4: Weak tactile + far sound (90% detection, 20% of stimuli=32)
+% 5: Strong tactile + near sound (100% detection, 20% of stimuli=32)
+% 6: Strong tactile + far sound (100% detection, 20% of stimuli=32)
+
+%% Experiment 2
+% GO: weak (or strong) tactile stimulus
+% NOGO: the other stimulus
+% half of each trial type has a far, and half a near sound
+% Conditions:
+% 1: 
+% 2: 
+% 3: Weak tactile + near sound (90% detection, 20% of stimuli=32)
+% 4: Weak tactile + far sound (90% detection, 20% of stimuli=32)
+% 5: Strong tactile + near sound (100% detection, 20% of stimuli=32)
+% 6: Strong tactile + far sound (100% detection, 20% of stimuli=32)
+
+%% Experiment 3
+% GO: weak (or strong) tactile stimulus
+% NOGO: the other stimulus
+% half of each trial type has a far, and half a near sound
+% Conditions:
+% 1: 
+% 2: 
+% 3: Weak tactile + near sound (90% detection, 20% of stimuli=32)
+% 4: Weak tactile + far sound (90% detection, 20% of stimuli=32)
+% 5: Strong tactile + near sound (100% detection, 20% of stimuli=32)
+% 6: Strong tactile + far sound (100% detection, 20% of stimuli=32)
+
+%% Experiment 4
+
+%% START THE PROGRAM
+bl_startup;                                                                 % initialise
+
+%%% CHANGE THIS FOR EACH PARTICIPANT
+e.threshold=str2num(cell2mat(inputdlg('Detection threshold?')));            % 90% detection threshold for tactile stimuli
+e.target=str2num(cell2mat(inputdlg('Target? (1=weak, 2=strong)')));         % tactile target
+
+%% EXPERIMENTAL SETTINGS
+cd 'C:\HandLab\P7_Audiotactile\P7_E1_Replication';                          % switch to experiment directory
+e.project=7;                                                                % project number
+e.num=1;                                                                    % experiment number # CHANGE THIS!
+e.conditions=6;                                                             % number of conditions
+%e.reps=[1 1 1 1 1 1];
+%e.reps=[4 4 8 8 8 8];                                                       % number of trials per condition per block
+e.reps=[0 0 10 10 10 10 ];                                                   % no catch trials                                                   
+e.trials=sum(e.reps);                                                       % trials per block
+e.blocks=1;                                                                 % number of blocks per experiment
+e.pbi=5;                                                                    % pre-block interval
+e.pti=1;                                                                    % minimum delay before target
+e.pti_rand=1;                                                               % range of delays before target
+e.trial_len=2.5;                                                            % length of each trial in s (not incl pre-target delay)
+e.iti=1;                                                                    % delay between trials
+e.trialarray=zeros(e.trials,11,e.blocks);                                   % create trial matrix
+%  1: random number
+%  2: condition number
+%  3: stimulus waveform (1=random white noise; 2=AM noise; 3=pink noise; 4=pure tone)
+%  4: tactile amplitude
+%  5: auditory location
+%  6: start time
+%  7: target time
+%  8: mean baseline
+%  9: SD baseline
+% 10: response crtiterion
+% 11: RT in samples
+% 12: RT in ms
+e.rt_min=0.15;                                                              % minimum RT in s
+
+%% AUDITORY SETTINGS (AUDITORY STIMULI AND VOCAL RESPONSES)
+auditory.samplehz=8000;                                                     % auditory recording frequency
+auditory.amp=[0.95 1];                                                      % amplitude of auditory waveforms [near far]
+auditory.distractor=zeros(auditory.samplehz.*e.trial_len,1);                % auditory distractor matrix (1=mono)
+auditory.envelope=bl_envelope(auditory.samplehz,e.trial_len);               % envelope for tactile target sounds
+auditory.distances=[5 105];                                                 % distance of speakers from hand
+auditory.speedofsound=34320;                                                % speed of sound at 20deg C in cm/s
+auditory.farsoa=(auditory.distances(2)-auditory.distances(1))./auditory.speedofsound;% s that far should precede near stimulus
+auditory.farsoas=round(auditory.farsoa.*auditory.samplehz);                 % samples offset
+vocal.filter=1000;                                                          % low-pass cutoff for filter
+[vocal.B vocal.A]=butter(2,vocal.filter./(auditory.samplehz./2),'low');     % response filter (low-pass)
+vocal.baseline=[0.125 100];                                                 % baseline period in ms
+vocal.baseline_samples=vocal.baseline.*auditory.samplehz./1000;             % convert to samples
+vocal.onset_SDs=10;                                                          % SDs from baseline mean for response onset
+data=zeros(e.trial_len.*auditory.samplehz,4,e.trials,e.blocks);             % matrix to store vocal response data (1=switch, 2=tactile, 3=auditory, 4=vocal)
+rectified=zeros(e.trial_len.*auditory.samplehz,e.trials,e.blocks);          % rectified vocal data
+filtered=zeros(e.trial_len.*auditory.samplehz,e.trials,e.blocks);           % filtered vocal data
+
+%% TACTILE SETTINGS
+tactile.target_dur=0.125;                                                   % tactile target duration
+tactile.wave=zeros(auditory.samplehz.*e.trial_len,1);                       % base waveform for auditory and tactile stimuli (1=mono)
+tactile.target=zeros(auditory.samplehz.*e.trial_len,1);                     % tactile target matrix (1=mono)
+tactile.envelope=bl_envelope(auditory.samplehz,tactile.target_dur);         % envelope for tactile target sounds
+tactile.delay=0.1;                                                          % delay after recording for target presentation
+tactile.delays=round(tactile.delay.*auditory.samplehz);                     % pre-target delay in samples
+
+%% SET UP NI CARD _________________________________________________________
+s=daq.createSession('ni');                                                  % setup NIDAQ session and object
+s.addDigitalChannel('Dev1','Port0/Line0','OutputOnly');                     % digital output for speaker switch (0=near, 1=far)
+chanin=s.addAnalogInputChannel('Dev1',3,'Voltage');                         % add analogue input channel (vocal response)
+chanin.Range=[-10 10];                                                      % voltage range
+chanin.InputType='SingleEnded';                                             % type of input
+chanout=s.addAnalogOutputChannel('Dev1',0:1,'Voltage');                     % add analogue output channel (tactile and auditory stimuli)
+for n=1:2
+ chanout(n).Range=[-10 10];                                                 % voltage range
+end
+s.Rate=auditory.samplehz;                                                   % set sampling rate
+outputvector=zeros(e.trial_len.*auditory.samplehz,3);                       % output vector for NI session (1=speaker switch, 2=tactile, 3=auditory)
+
+%% START THE EXPERIMENT
+tic;                                                                        % start experiment timer
+for b=1:e.blocks                                                            % for each block
+ %% START EACH BLOCK
+ figure(b);
+ 
+ %% SET UP CONDITIONS
+ e.trialarray(:,1,b)=rand(e.trials,1);                                      % fill first column with random numbers                 
+ for n=1:e.conditions                                                       % fill second with condition numbers
+     if n==1
+         e.trialarray(1:e.reps(n),2,b)=1;
+     else
+         e.trialarray(sum(e.reps(1:n-1))+1:sum(e.reps(1:n)),2,b)=n;
+     end
+ end
+ 
+ %% STIMULUS WAVEFORM
+ switch e.num
+  case {1}                                                                  % experiment 1
+   e.trialarray(:,3,b)=1;                                                   % random white noise
+ end
+ 
+ %% TACTILE CONDITIONS
+ e.trialarray(1:sum(e.reps(1:2)),4,b)=0;                                    % no tactile target
+ e.trialarray(sum(e.reps(1:2))+1:sum(e.reps(1:4)),4,b)=e.threshold;         % weak tactile target (at threshold)
+ e.trialarray(sum(e.reps(1:4))+1:end,4,b)=e.threshold.*1.5;                 % strong tactile target (1.5 x threshold)
+ 
+ %% AUDITORY CONDITIONS
+ e.trialarray(1:2:end,5,b)=1;                                               % near auditory stimulus
+ e.trialarray(2:2:end,5,b)=2;                                               % far auditory stimulus
+ 
+ %% RANDOMISE TRIALS
+ e.trialarray(:,:,b)=sortrows(e.trialarray(:,:,b),1);                       % randomise
+ pause(e.pbi);                                                              % pre-block pause
+ for t=1:e.trials
+  %% START EACH TRIAL   
+  disp(['trial #',int2str(t),', Condition: ',int2str(e.trialarray(t,2,b))]);% display progress on screen
+  
+  %% CHOOSE EXPERIMENTAL STIMULI
+  auditory.distractor=zeros(auditory.samplehz.*e.trial_len,1);              % clear auditory distractor matrix
+  switch e.trialarray(t,3,b)                                                % according to waveform
+   case {1} % random noise (new on each trial)
+    tactile.wave(1:tactile.target_dur.*auditory.samplehz)=(2.*rand(round(auditory.samplehz.*tactile.target_dur),1)-1).*tactile.envelope; % create basic waveform
+    
+%        % pure tone at frequency 1
+%     tactile.target(:,1)=bl_tone(tactile.target_hz1,auditory.samplehz,tactile.target_dur,tactile.target_amp);
+%    case {2} % pure tone at frequency 2
+%     tactile.target(:,1)=bl_tone(tactile.target_hz2,auditory.samplehz,tactile.target_dur,tactile.target_amp);
+%    case {3} % AM noise at frequency 1
+%     tactile.target(:,1)=bl_amnoise(auditory.samplehz,tactile.target_dur,tactile.target_hz1).*tactile.envelope.*tactile.target_amp;
+%    case {4} % AM noise at frequency 2
+%     tactile.target(:,1)=bl_amnoise(auditory.samplehz,tactile.target_dur,tactile.target_hz2).*tactile.envelope.*tactile.target_amp;
+%    case {5}
+  end
+  
+  tactile.target(tactile.delays+1:tactile.target_dur.*auditory.samplehz+tactile.delays)=tactile.wave(1:tactile.target_dur.*auditory.samplehz).*e.trialarray(t,4,b); % multiply waveform by tactile target amplitude for this condition
+  
+  if e.trialarray(t,5,b)==1                                                 % near auditory stimulus
+   outputvector(:,1)=0;
+   auditory.distractor(tactile.delays+1:tactile.target_dur.*auditory.samplehz+tactile.delays)=tactile.wave(1:tactile.target_dur.*auditory.samplehz).*auditory.amp(e.trialarray(t,5,b));% multiply waveform by auditory amplitude for distractor (near or far)
+  else                                                                      % far auditory stimulus
+   outputvector(:,1)=1;
+   auditory.distractor(tactile.delays+1-auditory.farsoas:tactile.target_dur.*auditory.samplehz+tactile.delays-auditory.farsoas)=tactile.wave(1:tactile.target_dur.*auditory.samplehz).*auditory.amp(e.trialarray(t,5,b));% multiply waveform by auditory amplitude for distractor (near or far)
+  end
+  outputvector(:,2:3)=[tactile.target auditory.distractor];                 % add target and distractor
+  s.queueOutputData([outputvector]);                                        % queue data for DAQ card
+     
+  %% RECORD VOICE AND PRESENT STIMULI
+  e.trialarray(t,6,b)=toc;                                                  % trial start time
+  delay=e.pti+rand*e.pti_rand;                                              % set delay
+  pause(delay);                                                             % wait random pre-trial delay
+  e.trialarray(t,7,b)=toc-e.trialarray(t,6,b);                              % record target start time
+  d=s.startForeground();                                                    % present target and start data collection
+  
+  % DATA RELATIVE TO TARGET...
+  data(:,1:3,t,b)=outputvector;                                             % save ouput vector data
+  data(:,4,t,b)=d;                                                          % save input data (vocal)
+  data(:,4,t,b)=data(:,4,t,b)-mean(data(1:vocal.baseline_samples,4,t,b));   % subtract baseline
+  rectified(:,t,b)=squeeze(abs(data(:,4,t,b)));                             % rectify this trial's vocal data
+  filtered(:,t,b)=filtfilt(vocal.B,vocal.A,rectified(:,t,b));               % low-pass filter the data  
+  
+  %% FIND RT
+  e.trialarray(t,8,b)=mean(filtered(vocal.baseline_samples,t,b));           % measure the mean of the baseline
+  e.trialarray(t,9,b)=std(filtered(vocal.baseline_samples,t,b));            % measure the SD of the baseline
+  e.trialarray(t,10,b)=e.trialarray(t,8,b)+(vocal.onset_SDs.*e.trialarray(t,9,b));% response criterion
+  start=(e.rt_min+tactile.delay).*auditory.samplehz;                        % where to start looking for reaction time
+  RT_samples=find(filtered(start+1:end,t,b)>e.trialarray(t,10,b),1)+start;  % find first sample above threshold
+  if size(RT_samples,1)==0
+   RT_samples=e.trial_len.*auditory.samplehz;
+  end
+  
+  %% PLOT DATA FOR THIS TRIAL
+  audiotactile_plot;
+  
+  %% STORE AND DISPLAY DATA
+  e.trialarray(t,11,b)=RT_samples;                                          % first point above threshold
+  e.trialarray(t,12,b)=e.trialarray(t,11,b)./auditory.samplehz;            % convert to ms
+  disp(['RT: ',num2str(e.trialarray(t,12,b),3)]);                           % display on screen
+  
+  %% PRESENT FEEDBACK
+  if e.trialarray(t,12,b)<0.25                                              % fast RTs
+   feedback=15;
+  elseif e.trialarray(t,12,b)<0.35                                          % medium RTs
+   feedback=7;
+  elseif e.trialarray(t,12,b)<0.45                                          % slow RTs
+   feedback=3;
+  else
+   feedback=1;                                                              % unacceptable RTs
+  end
+ end                                                                        % of trial loop
+ 
+ %% SAVE BLOCK DATA
+ save(['c:\HandLab\P7_Audiotactile\P7_E1_Replication\data\P',int2str(e.project),'_E',int2str(e.num),'_S',int2str(e.p),'_H',int2str(e.hid),'_',e.timestring,'.mat']); % save all variables
+
+ %% WAIT FOR NEXT BLOCK
+ if e.blocks>1                                                              % if multiple blocks
+    nextblock='N';                                                          % reset nextblock variable
+    while nextblock~='Y' && nextblock~='y'                                  % prompt for user input
+        nextblock=input('Next block? (Y)\n','s');                           % keep asking until 'Y'
+    end
+ end
+end                                                                         % of block loop
